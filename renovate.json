@@ -1,0 +1,36 @@
+{
+  "extends": ["config:recommended"],
+  "enabledManagers": ["custom.regex", "mise"],
+  "schedule": ["before 5am on monday"],
+  "packageRules": [
+    {
+      "groupName": "Packer plugins",
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["packer.pkr.hcl"]
+    },
+    {
+      "matchManagers": ["mise"],
+      "groupName": "mise tools"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["(^|/)packer\\.pkr\\.hcl$"],
+      "matchStrings": [
+        "proxmox\\s*=\\s*\\{[\\s\\S]*?version\\s*=\\s*\\\">?=(?<currentValue>[^\\\"]+)\\\"[\\s\\S]*?source\\s*=\\s*\\\"github\\.com/hashicorp/proxmox\\\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "hashicorp/packer-plugin-proxmox"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["(^|/)packer\\.pkr\\.hcl$"],
+      "matchStrings": [
+        "qemu\\s*=\\s*\\{[\\s\\S]*?version\\s*=\\s*\\\">?=(?<currentValue>[^\\\"]+)\\\"[\\s\\S]*?source\\s*=\\s*\\\"github\\.com/hashicorp/qemu\\\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "hashicorp/packer-plugin-qemu"
+    }
+  ]
+}
