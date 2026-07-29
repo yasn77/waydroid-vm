@@ -70,7 +70,7 @@ NETWORK
 
 systemctl enable systemd-networkd systemd-resolved sshd qemu-guest-agent
 systemctl enable spice-vdagentd.service || true
-systemctl enable cloud-init-local.service cloud-init.service cloud-config.service cloud-final.service || true
+systemctl enable cloud-init-main.service cloud-final.service || true
 ln -sfn /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true
 
 mkdir -p /etc/cloud/cloud.cfg.d
@@ -108,9 +108,14 @@ waydroid prop set persist.adb.tcp.port 5555 || true
 waydroid prop set persist.waydroid.multi_windows false || true
 waydroid session start >/tmp/waydroid-session.log 2>&1 &
 for _ in $(seq 1 30); do
-  waydroid status 2>/dev/null | grep -q 'Session:[[:space:]]*RUNNING' && break
+  if waydroid status 2>/dev/null | grep -q 'Session:[[:space:]]*RUNNING'; then
+    sleep 30
+    break
+  fi
   sleep 1
 done
+export XDG_RUNTIME_DIR=/run/user/1000
+export WAYLAND_DISPLAY=wayland-0
 exec waydroid show-full-ui
 KIOSK
 chmod 0755 /usr/local/bin/waydroid-kiosk
