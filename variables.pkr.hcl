@@ -46,7 +46,8 @@ variable "proxmox_vga_type" {
 
 variable "proxmox_http_ip" {
   type        = string
-  description = "(Local) Address reachable by the Proxmox VM during Arch installation."
+  default     = "127.0.0.1"
+  description = "Address reachable by the Proxmox VM during Arch installation; override for real builds."
 }
 
 variable "proxmox_http_port" {
@@ -79,7 +80,8 @@ variable "proxmox_node" {
 }
 
 variable "proxmox_api_url" {
-  type    = string
+  type        = string
+  default     = "https://127.0.0.1:8006/api2/json"
   description = "Format is https://xxx.xxx.xxx.xxx:8006/api2/json"
 }
 
