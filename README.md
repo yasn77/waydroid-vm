@@ -232,7 +232,10 @@ build is complete, switch its display to `virtio-gl` using the command above.
    ```
 
    The SPICE proxy ticket is short-lived, so generate a fresh `.vv` file when
-   connecting.
+   connecting. Proxmox marks the file with `delete-this-file=1`, and
+   `remote-viewer` deletes it after opening by design. If you need to retain a
+   diagnostic copy, duplicate it before opening and change that flag to `0`;
+   do not share the file because it contains a temporary SPICE credential.
 4. Find the VM's address from the Proxmox console or DHCP lease, then connect
    ADB from a test machine:
 
