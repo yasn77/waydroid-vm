@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Build the QEMU/KVM Waydroid image"
+#MISE depends=["fmt"]
+
+set -euo pipefail
+packer init .
+packer build -only=qemu.waydroid_qemu .

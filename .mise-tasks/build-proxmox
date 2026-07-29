@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#MISE description="Build the Proxmox Waydroid template"
+#MISE depends=["fmt"]
+
+set -euo pipefail
+: "${PKR_VAR_proxmox_api_url:?Set PKR_VAR_proxmox_api_url}"
+: "${PKR_VAR_proxmox_http_ip:?Set PKR_VAR_proxmox_http_ip}"
+: "${PKR_VAR_proxmox_iso_file:?Set PKR_VAR_proxmox_iso_file}"
+: "${PKR_VAR_proxmox_api_token_id:?Set PKR_VAR_proxmox_api_token_id}"
+: "${PKR_VAR_proxmox_api_token_secret:?Set PKR_VAR_proxmox_api_token_secret}"
+
+packer init .
+packer build -only=proxmox-iso.waydroid_proxmox .
+mise run configure-proxmox-display

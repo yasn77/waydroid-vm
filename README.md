@@ -1,5 +1,12 @@
 # Waydroid VM
 
+```text
++--------------------------------------------------------------+
+|                         WAYDROID VM                          |
+|             Repeatable Arch Linux Android test labs          |
++--------------------------------------------------------------+
+```
+
 > **An Arch Linux appliance for repeatable Android testing — built with
 > HashiCorp Packer.**
 
@@ -8,6 +15,17 @@ Android container runtime. The result is intended for disposable Android
 application testing: boot the appliance, reach the Android UI through its
 standalone Wayland session, and use ADB over TCP from the host or another
 machine on the VM network.
+
+```mermaid
+flowchart LR
+    P[Packer] --> A[Arch Linux VM]
+    A --> C[Cage / Wayland]
+    C --> W[Waydroid]
+    W --> G[GAPPS]
+    H[Test host] -->|ADB :5555| W
+    H -->|SPICE / serial| A
+    CI[Cloud-init] --> A
+```
 
 Proxmox is the primary tested target. A local QEMU/KVM target is also
 provided for development and validation.
@@ -28,13 +46,23 @@ The builders request four vCPUs, 4 GiB RAM, and host CPU features. KVM and a
 CPU capable of exposing the required virtualisation features are therefore
 needed. On Proxmox, the template is created with `cpu_type = "host"`.
 
-### Display caveat
+### Display Caveat
 
 The Proxmox source deliberately uses the installer-safe VGA value `std` by
 default. After the build, change the completed template's display to
 `virtio-gl` in Proxmox before using the graphical appliance. This is a
-manual post-build step in the current configuration; Packer does **not** make
-that change automatically. The Proxmox source also provides a serial socket.
+manual post-build step for direct Packer builds; Packer does **not** make that
+change automatically. The `mise run build:proxmox` task performs the change
+through the Proxmox API after a successful build. For a direct Packer build,
+find the generated template VM ID and run on the Proxmox node:
+
+```sh
+qm set <template-vmid> --vga virtio-gl,memory=64
+```
+
+The Proxmox source also provides a serial socket. `virtio-gl` exposes the
+Proxmox SPICE console, and `spice-vdagent` is installed for clipboard, pointer,
+and display integration.
 The QEMU source is headless at the Packer level and supplies an installer
 serial log; use ADB or your preferred QEMU display configuration when running
 the resulting disk.
@@ -54,7 +82,7 @@ the resulting disk.
 
 ## Prerequisites and safety
 
-* Linux with Packer and, for the QEMU target, working KVM access.
+* Linux with Packer, `curl`, and `jq`; for the QEMU target, working KVM access.
 * A current Arch ISO matching the configured checksum. QEMU downloads the
   default `2026.07.01` ISO mirror URL from `variables.pkr.hcl`.
 * For Proxmox, API access, a node, storage pools, and a VM network bridge.
@@ -82,16 +110,20 @@ The repository also exposes the common checks and builds as mise tasks:
 
 ```sh
 mise run fmt
-mise run validate:qemu
-mise run validate:proxmox
-mise run build:qemu
-mise run build:proxmox
+mise run validate-qemu
+mise run validate-proxmox
+mise run build-qemu
+mise run build-proxmox
 ```
 
 The Proxmox validation and build tasks require the `PKR_VAR_proxmox_*`
 credentials, ISO, and HTTP-address variables described below.
 
-## Proxmox preparation
+## Proxmox Preparation
+
+> [!IMPORTANT]
+> The Arch ISO must already exist on Proxmox storage. Packer does not upload
+> the ISO during the Proxmox build.
 
 The Proxmox builder expects the ISO to already exist on Proxmox storage; it
 does not upload the local ISO. Upload it through the Proxmox UI or download it
@@ -145,11 +177,22 @@ export PKR_VAR_proxmox_api_token_id="<token-id>"
 export PKR_VAR_proxmox_api_token_secret="<token-secret>"
 export PKR_VAR_proxmox_http_ip="<laptop-reachable-address>"
 export PKR_VAR_proxmox_iso_file="<proxmox-storage-name>:iso/archlinux-2026.07.01-x86_64.iso"
+export PKR_VAR_proxmox_cloud_init_storage_pool="<cloud-init-storage-name>"
+export PROXMOX_TEMPLATE_NAME="archlinux-waydroid-golden"
 
 packer init .
 packer validate -only=proxmox-iso.waydroid_proxmox .
 packer build -only=proxmox-iso.waydroid_proxmox .
 ```
+
+For the complete build-and-configure workflow, use:
+
+```sh
+mise run build:proxmox
+```
+
+That task builds the template and then changes its display to `virtio-gl`
+through the Proxmox API.
 
 If the token is supplied by another environment variable, assign it with
 quotes rather than embedding it in an unquoted command. This avoids shell
@@ -167,21 +210,30 @@ necessarily the Proxmox node address. The VM must be able to fetch
 
 The default Proxmox storage and node values can be overridden with the
 corresponding `PKR_VAR_...` variables. The build creates a template with a
-cloud-init drive, host CPU features, a serial socket, and installer VGA. Once
-it is complete, switch its display to `virtio-gl` manually if graphical
-Waydroid output is required.
+cloud-init drive, host CPU features, a serial socket, and installer VGA. The
+cloud-init drive is stored in `proxmox_cloud_init_storage_pool`, which defaults
+to `local`; override it if that storage cannot hold cloud-init drives. Once the
+build is complete, switch its display to `virtio-gl` using the command above.
 
-## First boot and daily testing
+## First Boot and Daily Testing
 
-1. In Proxmox, configure cloud-init user data for the first boot: set a unique
-   password and/or an SSH public key for the account you use. Cloud-init is
-   enabled and SSH password authentication is enabled by the image, but the
-   generated drive does not replace your operational first-boot policy.
+1. In Proxmox, configure cloud-init user data for the first boot. Use the
+   existing `arch` account, set a unique password and/or add an SSH public key.
+   Cloud-init is enabled with the `NoCloud` and `ConfigDrive` data sources, and
+   SSH password authentication is enabled by the image.
 2. Start the VM and wait for networking and the Cage/Waydroid kiosk service.
-   Use the Proxmox serial socket for low-level diagnosis. After configuring a
-   SPICE-capable display/console, the installed SPICE agent improves pointer
-   and clipboard integration.
-3. Find the VM's address from the Proxmox console or DHCP lease, then connect
+   Use the Proxmox serial socket for low-level diagnosis.
+3. Open the graphical console through Proxmox SPICE after changing the display
+   to `virtio-gl`. Proxmox's **Console > SPICE** action downloads a `.vv` file;
+   open it with:
+
+   ```sh
+   remote-viewer <downloaded-file>.vv
+   ```
+
+   The SPICE proxy ticket is short-lived, so generate a fresh `.vv` file when
+   connecting.
+4. Find the VM's address from the Proxmox console or DHCP lease, then connect
    ADB from a test machine:
 
    ```sh
@@ -191,12 +243,14 @@ Waydroid output is required.
 
    Restrict TCP/5555 to a trusted test network. The appliance enables ADB in
    Waydroid; it is not an Android device-management security boundary.
-4. Install and exercise the Android application under test. The Tailscale APK
+5. Install and exercise the Android application under test. The Tailscale APK
    is an Android application inside Waydroid, so Android permissions, VPN
    behaviour, kernel support, and Waydroid networking can affect it. It does
-   not provide Tailscale connectivity for the Arch host.
+   not provide Tailscale connectivity for the Arch host. The APK is installed
+   during provisioning, but it is not authenticated to a tailnet; complete the
+   Tailscale Android sign-in or auth-key flow after first boot.
 
-## Validation and troubleshooting
+## Validation and Troubleshooting
 
 ```sh
 packer fmt -check .

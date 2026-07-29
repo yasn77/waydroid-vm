@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#MISE description="Set the completed Proxmox template to virtio-gl"
+
+set -euo pipefail
+
+: "${PKR_VAR_proxmox_api_url:?Set PKR_VAR_proxmox_api_url}"
+: "${PKR_VAR_proxmox_node:?Set PKR_VAR_proxmox_node}"
+: "${PKR_VAR_proxmox_api_token_id:?Set PKR_VAR_proxmox_api_token_id}"
+: "${PKR_VAR_proxmox_api_token_secret:?Set PKR_VAR_proxmox_api_token_secret}"
+
+template_name="${PROXMOX_TEMPLATE_NAME:-archlinux-waydroid-golden}"
+auth_header="PVEAPIToken=${PKR_VAR_proxmox_api_token_id}=${PKR_VAR_proxmox_api_token_secret}"
+base_url="${PKR_VAR_proxmox_api_url%/}"
+
+vmid="$(curl -fsS \
+  -H "Authorization: ${auth_header}" \
+  "${base_url}/nodes/${PKR_VAR_proxmox_node}/qemu" |
+  jq -r --arg name "${template_name}" \
+    '.data[] | select(.template == 1 and .name == $name) | .vmid' |
+  head -n 1)"
+
+if [[ -z "${vmid}" ]]; then
+  printf 'No Proxmox template named %s was found.\n' "${template_name}" >&2
+  exit 1
+fi
+
+curl -fsS -X PUT \
+  -H "Authorization: ${auth_header}" \
+  --data-urlencode 'vga=virtio-gl,memory=64' \
+  "${base_url}/nodes/${PKR_VAR_proxmox_node}/qemu/${vmid}/config" >/dev/null
+
+actual="$(curl -fsS \
+  -H "Authorization: ${auth_header}" \
+  "${base_url}/nodes/${PKR_VAR_proxmox_node}/qemu/${vmid}/config" |
+  jq -r '.data.vga')"
+
+if [[ "${actual}" != "virtio-gl,memory=64" ]]; then
+  printf 'Unexpected Proxmox VGA configuration: %s\n' "${actual}" >&2
+  exit 1
+fi
+
+printf 'Configured template %s (VMID %s) with %s.\n' "${template_name}" "${vmid}" "${actual}"

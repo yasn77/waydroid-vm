@@ -1,24 +1,2 @@
 [tools]
 packer = "v1.16.0"
-
-[tasks.fmt]
-description = "Check Packer formatting"
-run = "packer fmt -check ."
-
-[tasks."validate:qemu"]
-description = "Validate the QEMU source"
-run = "packer validate -only=qemu.waydroid_qemu ."
-
-[tasks."validate:proxmox"]
-description = "Validate the Proxmox source using required environment variables"
-run = "bash -c ': \"${PKR_VAR_proxmox_api_url:?Set PKR_VAR_proxmox_api_url}\"; : \"${PKR_VAR_proxmox_http_ip:?Set PKR_VAR_proxmox_http_ip}\"; : \"${PKR_VAR_proxmox_iso_file:?Set PKR_VAR_proxmox_iso_file}\"; : \"${PKR_VAR_proxmox_api_token_id:?Set PKR_VAR_proxmox_api_token_id}\"; : \"${PKR_VAR_proxmox_api_token_secret:?Set PKR_VAR_proxmox_api_token_secret}\"; packer validate -only=proxmox-iso.waydroid_proxmox .'"
-
-[tasks."build:qemu"]
-description = "Build the QEMU/KVM Waydroid image"
-depends = ["fmt"]
-run = "packer init . && packer build -only=qemu.waydroid_qemu ."
-
-[tasks."build:proxmox"]
-description = "Build the Proxmox Waydroid template"
-depends = ["fmt"]
-run = "bash -c ': \"${PKR_VAR_proxmox_api_url:?Set PKR_VAR_proxmox_api_url}\"; : \"${PKR_VAR_proxmox_http_ip:?Set PKR_VAR_proxmox_http_ip}\"; : \"${PKR_VAR_proxmox_iso_file:?Set PKR_VAR_proxmox_iso_file}\"; : \"${PKR_VAR_proxmox_api_token_id:?Set PKR_VAR_proxmox_api_token_id}\"; : \"${PKR_VAR_proxmox_api_token_secret:?Set PKR_VAR_proxmox_api_token_secret}\"; packer init . && packer build -only=proxmox-iso.waydroid_proxmox .'"
