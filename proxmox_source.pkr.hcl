@@ -46,7 +46,8 @@ source "proxmox-iso" "waydroid_proxmox" {
   }
 
   boot_command = [
-    "<enter><wait30s>",
+    "<enter><wait45s>",
+    "<enter><wait5s>",
     "curl -fsSL http://${var.proxmox_http_ip}:${var.proxmox_http_port}/install-arch.sh | bash",
     "<enter>"
   ]

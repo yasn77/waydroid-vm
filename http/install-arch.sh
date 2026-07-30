@@ -81,12 +81,14 @@ disable_root: true
 CLOUD
 
 grub-install --target=i386-pc "$${DISK}"
+sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/GRUB_CMDLINE_LINUX_DEFAULT="psi=1 /' /etc/default/grub || true
 grub-mkconfig -o /boot/grub/grub.cfg
 
 mkdir -p /etc/modules-load.d /etc/modprobe.d
 cat > /etc/modules-load.d/waydroid.conf <<'MODULES'
 loop
 tun
+binder_linux
 MODULES
 cat > /etc/modprobe.d/waydroid.conf <<'MODULES'
 options binder_linux devices=binder,hwbinder,vndbinder
@@ -100,25 +102,30 @@ SYSCTL
 
 systemctl enable waydroid-container.service
 
-cat > /usr/local/bin/waydroid-kiosk <<'KIOSK'
-#!/usr/bin/env bash
-set -euo pipefail
+cat > /etc/systemd/system/waydroid-adb.service <<'SERVICE'
+[Unit]
+Description=Enable ADB over TCP for Waydroid
+After=waydroid-container.service waydroid-kiosk.service
+Wants=waydroid-container.service
 
-waydroid prop set persist.adb.tcp.port 5555 || true
-waydroid prop set persist.waydroid.multi_windows false || true
-waydroid session start >/tmp/waydroid-session.log 2>&1 &
-for _ in $(seq 1 30); do
-  if waydroid status 2>/dev/null | grep -q 'Session:[[:space:]]*RUNNING'; then
-    sleep 30
-    break
-  fi
-  sleep 1
-done
-export XDG_RUNTIME_DIR=/run/user/1000
-export WAYLAND_DISPLAY=wayland-0
-exec waydroid show-full-ui
-KIOSK
-chmod 0755 /usr/local/bin/waydroid-kiosk
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/timeout 120 /bin/sh -c 'until /usr/bin/waydroid status 2>/dev/null | /usr/bin/grep -q "Container:[[:space:]]*RUNNING"; do /usr/bin/sleep 1; done; /usr/bin/waydroid prop set persist.adb.tcp.port 5555 || true; CONTAINER_IP=$(/usr/bin/waydroid status 2>/dev/null | /usr/bin/awk "/IP address:/ {print \$3}"); if [ -n "$CONTAINER_IP" ] && [ "$CONTAINER_IP" != "UNKNOWN" ]; then /usr/bin/iptables -t nat -A PREROUTING -p tcp --dport 5555 -j DNAT --to-destination $CONTAINER_IP:5555 || true; /usr/bin/iptables -t nat -A OUTPUT -p tcp -o lo --dport 5555 -j DNAT --to-destination $CONTAINER_IP:5555 || true; /usr/bin/iptables -A FORWARD -p tcp -d $CONTAINER_IP --dport 5555 -j ACCEPT || true; fi'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+systemctl enable waydroid-adb.service
+
+mkdir -p /var/lib/systemd/linger
+touch /var/lib/systemd/linger/arch
+
+mkdir -p /etc/tmpfiles.d
+cat > /etc/tmpfiles.d/waydroid.conf <<'TMPFILES'
+d /run/user/1000 0700 arch arch - -
+TMPFILES
 
 cat > /etc/systemd/system/waydroid-kiosk.service <<'SERVICE'
 [Unit]
@@ -133,8 +140,10 @@ User=arch
 Group=arch
 PAMName=login
 Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=WLR_LIBINPUT_NO_DEVICES=1
-ExecStart=/usr/bin/cage -d -s -- /usr/local/bin/waydroid-kiosk
+Environment=WLR_NO_HARDWARE_CURSORS=1
+ExecStart=/usr/bin/cage -d -s -- /usr/bin/waydroid show-full-ui
 Restart=always
 RestartSec=3
 StandardInput=tty
@@ -154,6 +163,14 @@ rm -f /mnt/etc/resolv.conf || true
 cp --dereference /etc/resolv.conf /mnt/etc/resolv.conf
 NO_PROXY=sourceforge.net,.sourceforge.net no_proxy=sourceforge.net,.sourceforge.net \
   arch-chroot /mnt waydroid init -s GAPPS
+
+if [ -f /mnt/var/lib/waydroid/waydroid.cfg ]; then
+  if grep -q '\[waydroid\]' /mnt/var/lib/waydroid/waydroid.cfg; then
+    sed -i '/\[waydroid\]/a persist.adb.tcp.port = 5555' /mnt/var/lib/waydroid/waydroid.cfg
+  else
+    echo "persist.adb.tcp.port = 5555" >> /mnt/var/lib/waydroid/waydroid.cfg
+  fi
+fi
 
 rm -f /mnt/etc/resolv.conf || true
 ln -sfn /run/systemd/resolve/stub-resolv.conf /mnt/etc/resolv.conf || true
