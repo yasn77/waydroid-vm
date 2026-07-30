@@ -36,6 +36,9 @@ genfstab -U /mnt >> /mnt/etc/fstab
 arch-chroot /mnt /bin/bash -s <<CHROOT
 set -euxo pipefail
 
+DISK="$(lsblk -dpno NAME,TYPE | awk '$2 == "disk" { print $1; exit }')"
+[[ -n "$${DISK}" ]]
+
 sed -i '/^XferCommand = \/usr\/bin\/curl -x /d' /etc/pacman.conf
 
 ln -sf /usr/share/zoneinfo/Europe/London /etc/localtime
@@ -110,7 +113,7 @@ Wants=waydroid-container.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/timeout 120 /bin/sh -c 'until /usr/bin/waydroid status 2>/dev/null | /usr/bin/grep -q "Container:[[:space:]]*RUNNING"; do /usr/bin/sleep 1; done; /usr/bin/waydroid prop set persist.adb.tcp.port 5555 || true; CONTAINER_IP=$(/usr/bin/waydroid status 2>/dev/null | /usr/bin/awk "/IP address:/ {print \$3}"); if [ -n "$CONTAINER_IP" ] && [ "$CONTAINER_IP" != "UNKNOWN" ]; then /usr/bin/iptables -t nat -A PREROUTING -p tcp --dport 5555 -j DNAT --to-destination $CONTAINER_IP:5555 || true; /usr/bin/iptables -t nat -A OUTPUT -p tcp -o lo --dport 5555 -j DNAT --to-destination $CONTAINER_IP:5555 || true; /usr/bin/iptables -A FORWARD -p tcp -d $CONTAINER_IP --dport 5555 -j ACCEPT || true; fi'
+ExecStart=/usr/bin/timeout 120 /bin/sh -c 'until /usr/bin/waydroid status 2>/dev/null | /usr/bin/grep -q "Container:[[:space:]]*RUNNING"; do /usr/bin/sleep 1; done; /usr/bin/waydroid prop set persist.adb.tcp.port 5555'
 RemainAfterExit=yes
 
 [Install]
