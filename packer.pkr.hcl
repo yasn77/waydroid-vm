@@ -1,11 +1,11 @@
 packer {
   required_plugins {
     proxmox = {
-      version = ">= 1.1.8"
+      version = ">=v1.2.4"
       source  = "github.com/hashicorp/proxmox"
     }
     qemu = {
-      version = ">= 1.1.0"
+      version = ">=v1.1.7"
       source  = "github.com/hashicorp/qemu"
     }
   }
